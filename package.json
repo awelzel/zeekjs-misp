@@ -1,0 +1,16 @@
+{
+  "name": "zeek-js-misp",
+  "version": "0.1.0",
+  "description": "MISP connectivity for Zeek",
+  "main": "index.js",
+  "scripts": {
+    "test": "eslint ."
+  },
+  "author": "",
+  "license": "BSD-2-Clause",
+  "devDependencies": {
+    "eslint": "^8.43.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.27.5"
+  }
+}

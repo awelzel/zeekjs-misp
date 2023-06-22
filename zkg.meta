@@ -1,0 +1,6 @@
+[package]
+
+script_dir = ./scripts
+
+depends =
+   zeekjs >=0.9.0
