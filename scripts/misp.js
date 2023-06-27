@@ -40,12 +40,10 @@ class MISP {
 
   // Internal helper to do a request to MISP
   async doRequest(method, path, resolve, reject, jsonBody = undefined) {
-    // console.log(`Doing request ${method} ${path}`, JSON.stringify(jsonBody));
     const opts = {
       ...this.options,
       method,
       path,
-      json: true,
     };
 
     const req = https.request(opts, (res) => {
@@ -114,14 +112,18 @@ class MISP {
     });
   }
 
+  // Report a sighting to the MISP instance given an Attribute UUID or ID.
   async addSightingAttribute(attributeId) {
     return new Promise((resolve, reject) => {
       this.doRequest(
         'POST',
         `/sightings/add/${attributeId}`,
         (data) => {
-          console.log('SIGHTINGS RESPONSE', data);
-          resolve(data);
+          if (data?.Sighting !== undefined) {
+            resolve(data.Sigthing);
+          } else {
+            reject(data);
+          }
         },
         reject,
       );

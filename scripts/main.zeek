@@ -5,16 +5,27 @@ module MISP;
 
 export {
 	## URL to MISP server. HTTPS required.
-	option url: string = "";
-	option api_key: string = "";
-	## Allow self-signed certificate.
-	option insecure: bool = F;
+	const url: string = "" &redef;
 
-	## Interval query and refresh metadata.
-	option refresh_interval = 2 mins;
+	## API key for the MISP server.
+	const api_key: string = "" &redef;
 
-	## Fixed events to load attributes from
-	option fixed_events: set[count] = {};
+	## Allow self-signed certificate for testing.
+	const insecure: bool = F &redef;
+
+	## Interval to query and refresh Intel data.
+	const refresh_interval = 2 mins &redef;
+
+	## Fixed event IDs to load attributes from.
+	const fixed_events: set[count] = {} &redef;
+
+	## Report this many sightings back to MISP
+	## in max_item_sightings_interval.
+	const max_item_sightings = 5 &redef;
+
+	## Interval for max_item_sightings to avoid
+	## reporting too many sightings.
+	const max_item_sightings_interval = 5secs &redef;
 }
 
 
@@ -22,16 +33,15 @@ redef record Intel::MetaData += {
 	misp_event_id: count &optional;
 	misp_attribute_uid: string &optional;
 	report_sightings: bool &default = F;
-	matches: count &default=0;
-	# TODO: Track heavy hitters (see threatbus approach)
 };
 
 
-# Only run JavaScript functionality on the manager
+# Only run JavaScript functionality on the manager process.
 #
-# 1) Load data via MISP events/attributes.
+# 1) Queries the MISP server for events and aattributes and populates
+#    the intel framework.
 # 2) Distributes Intel data to the workers
-# 3) Report sigthings back to MISP by handling Intel::match event.
+# 3) Report sigthings back to MISP by handling Intel::match() events.
 #
 @if ( ! Cluster::is_enabled() || Cluster::local_node_type() == Cluster::MANAGER )
 @load ./zeek-misp.js

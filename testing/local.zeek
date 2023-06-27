@@ -22,20 +22,13 @@ redef LogAscii::use_json = T;
 # Enable intel seen and report any hosts.
 @load frameworks/intel/seen
 
-event new_connection(c: connection) {
-	Intel::seen([$host=c$id$orig_h, $conn=c, $where=Conn::IN_ORIG]);
-	Intel::seen([$host=c$id$resp_h, $conn=c, $where=Conn::IN_RESP]);
-}
-
-event Intel::match(s: Intel::Seen, items: set[Intel::Item]) {
-  for ( item in items ) {
-	print "ZEEK meta", item$meta, item$meta$matches;
-
-	# This doesn't work...
-	item$meta$matches = item$meta$matches + 1;
-  }
-}
-
+# This is for testing all connections, but it causes duplicate intel
+# matches per connection, too.
+#
+# event new_connection(c: connection) {
+#	Intel::seen([$host=c$id$orig_h, $conn=c, $where=Conn::IN_ORIG]);
+#	Intel::seen([$host=c$id$resp_h, $conn=c, $where=Conn::IN_RESP]);
+#}
 
 # Log the loaded intel data on a regular basis.
 module Intel;

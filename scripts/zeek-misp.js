@@ -1,8 +1,10 @@
-// zeek specific
-
 const misp = require('./misp');
 
-let refreshIntervalMilliSeconds = 120 * 1000;
+// Read some redefs from the Zeek side into globals
+const refreshIntervalMilliSeconds = zeek.global_vars['MISP::refresh_interval'] * 1000;
+const maxItemSightings = zeek.global_vars['MISP::max_item_sightings'];
+const maxItemSightingsIntervalMilliseconds = zeek.global_vars['MISP::max_item_sightings_interval'] * 1000;
+
 let refreshRunning = false;
 
 let mispObj = null;
@@ -28,15 +30,15 @@ function mungeMispValue(t, v) {
   // ip-dst|port 207.148.99.121|9000
   //
   // Not sure if ignoring the port is okay: We may need to post-process
-  // the intel match and check for id$resp_p? Also, what protocol?!
+  // the intel match and check for id$resp_p? This could get a bit
+  // hairy unless we make it explicit in the metadata.
   if (t === 'ip-dst|port') { return v.split('|')[0]; }
 
   return v;
 }
 
 function attributesAsIntelItems(attributes, baseMeta) {
-  const r = [];
-  attributes.forEach((attr) => {
+  return attributes.reduce((items, attr) => {
     const intelType = mispTypeToIntelType[attr.type];
 
     if (intelType !== undefined) {
@@ -45,13 +47,13 @@ function attributesAsIntelItems(attributes, baseMeta) {
         indicator_type: intelType,
         meta: { ...baseMeta, misp_attribute_uid: attr.uuid },
       };
-      r.push(intelItem);
+      items.push(intelItem);
     } else {
       console.log('IGNORING', attr.type, attr.value);
     }
-  });
 
-  return r;
+    return items;
+  }, []);
 }
 
 function insertIntelItem(item) {
@@ -59,7 +61,6 @@ function insertIntelItem(item) {
 }
 
 async function refreshEvent(eventId) {
-  console.log('refreshEvent', eventId);
   let start = performance.now();
   const attributes = await mispObj.attributesRestSearch({
     eventid: eventId.toString(),
@@ -97,8 +98,12 @@ async function refreshIntel() {
   const fixedEvents = zeek.global_vars['MISP::fixed_events'];
   console.log(`Loading intel data for fixed events ${fixedEvents}`);
 
-  // XXX: This is async!
-  fixedEvents.forEach(refreshEvent);
+  const pendingPromises = fixedEvents.map(refreshEvent);
+  await Promise.all(pendingPromises).catch((reason) => {
+    console.error('Failed to fetch fixed events:', reason);
+  });
+
+  console.log('fixed events done');
 
   refreshRunning = false;
 }
@@ -107,15 +112,15 @@ zeek.on('zeek_init', () => {
   console.log('Starting up zeek-js-misp');
   console.log('url', zeek.global_vars['MISP::url']);
   console.log('api_key', `${zeek.global_vars['MISP::api_key'].slice(0, 4)}...`);
-  console.log('refresh_interval', `${zeek.global_vars['MISP::refresh_interval']}`);
+  console.log('refresh_interval', refreshIntervalMilliSeconds);
+  console.log('max_item_sightings', maxItemSightings);
+  console.log('max_item_sightings_interval', maxItemSightingsIntervalMilliseconds);
 
   mispObj = new misp.MISP(
     zeek.global_vars['MISP::url'],
     zeek.global_vars['MISP::api_key'],
     zeek.global_vars['MISP::insecure'],
   );
-
-  refreshIntervalMilliSeconds = zeek.global_vars['MISP::refresh_interval'] * 1000;
 
   setImmediate(refreshIntel);
 });
@@ -125,28 +130,40 @@ BigInt.prototype.toJSON = function () {
   return this.toString();
 };
 
+const mispHits = new Map();
+
 // Report intel matches back to the MISP instance.
-//
-// TODO: Rate-limit heavy hitters.
 zeek.on('Intel::match', { priority: -1 }, async (seen, items) => {
-  console.log('JS Intel::match', JSON.stringify(seen), 'items', JSON.stringify(items));
+  console.log('JS Intel::match', seen.where, items[0]);
 
-  for (let i = 0; i < items.length; i += 1) {
-    const item = items[i];
-    const { meta } = items[i];
+  const pendingPromises = [];
+  items.forEach((item) => {
+    const { meta } = item;
+    const attributeId = meta.misp_attribute_uid;
 
-    // eslint-disable-next-line
-    // meta.matches = meta.matches + 1n;
-    console.log(zeek.invoke('type_name', [meta]));
-    console.log(zeek.invoke('to_json', [meta]));
+    if (meta.report_sightings && attributeId !== undefined) {
+      const now = Date.now();
+      let hitsEntry = mispHits.get(attributeId);
 
-    if (item.meta.report_sightings && item.meta.misp_attribute_uid) {
-      console.log('Sending sighting!');
-      // eslint-disable-next-line
-      await mispObj.addSightingAttribute(item.meta.misp_attribute_uid);
-      console.log('Sighting sent');
-    } else {
-      console.log('NOPE');
+      console.log(`Current hits ${attributeId} ${JSON.stringify(hitsEntry)}`);
+
+      // Create/reset hitsEntry if expired.
+      if (hitsEntry === undefined || hitsEntry.ts < now - maxItemSightingsIntervalMilliseconds) {
+        hitsEntry = { ts: now, hits: 0 };
+        mispHits.set(attributeId, hitsEntry);
+      }
+
+      if (hitsEntry.hits < maxItemSightings) {
+        pendingPromises.push(mispObj.addSightingAttribute(item.meta.misp_attribute_uid));
+        hitsEntry.hits += 1;
+      } else {
+        console.log(`Sighting rate limited ${item.indicator} - ${hitsEntry}`);
+      }
     }
-  }
+  });
+
+  // Wait for all the sigthings to finish.
+  await Promise.all(pendingPromises).catch((r) => {
+    console.error('ERROR: Sending sightings failed:', r);
+  });
 });
