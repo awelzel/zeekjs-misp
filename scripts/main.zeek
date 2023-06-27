@@ -17,7 +17,17 @@ export {
 	const refresh_interval = 2 mins &redef;
 
 	## Fixed event IDs to load attributes from.
+	##
+	## Queries all attributes of these events and populates
+	## the Intel framework.
 	const fixed_events: set[count] = {} &redef;
+
+	## Use the following tags as a filter. Use "!tag" for negation.
+	const attributes_search_tags: vector of string &redef;
+
+	## Interval to go back to search for attributes
+	## within MISP.
+	const attributes_search_interval = 90days;
 
 	## Report this many sightings back to MISP
 	## in max_item_sightings_interval.

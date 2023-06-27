@@ -15,14 +15,24 @@ const mispTypeToIntelType = {
   domain: 'Intel::DOMAIN',
   // good enough?
   hostname: 'Intel::DOMAIN',
+  filename: 'Intel::FILE_NAME',
   md5: 'Intel::FILE_HASH',
   sha1: 'Intel::FILE_HASH',
   sha256: 'Intel::FILE_HASH',
+  sha512: 'Intel::FILE_HASH', // no native support in Zeek
   url: 'Intel::URL',
+  'email-src': 'Intel::EMAIL',
 
   // That is pretty annoying...
   'ip-dst|port': 'Intel::ADDR',
 };
+
+const mispTypesIgnored = new Set([
+  'yara',
+  'malware-sample',
+  'ssdeep',
+  'pattern-in-traffic',
+]);
 
 function mungeMispValue(t, v) {
   if (t === 'url') { return v.replace(/^https?:\/\//, ''); }
@@ -37,19 +47,28 @@ function mungeMispValue(t, v) {
   return v;
 }
 
-function attributesAsIntelItems(attributes, baseMeta) {
+function attributesAsIntelItems(attributes) {
   return attributes.reduce((items, attr) => {
-    const intelType = mispTypeToIntelType[attr.type];
+    const eventId = attr.Event.id;
+    const meta = {
+      source: `MISP-${eventId}`,
+      desc: JSON.stringify(attr.Event),
+      url: `${mispObj.url}/events/view/${eventId}`,
+      report_sightings: true,
+      misp_event_id: parseInt(eventId, 10),
+      misp_attribute_uid: attr.uuid,
+    };
 
+    const intelType = mispTypeToIntelType[attr.type];
     if (intelType !== undefined) {
       const intelItem = {
         indicator: mungeMispValue(attr.type, attr.value),
         indicator_type: intelType,
-        meta: { ...baseMeta, misp_attribute_uid: attr.uuid },
+        meta,
       };
       items.push(intelItem);
-    } else {
-      console.log('IGNORING', attr.type, attr.value);
+    } else if (!mispTypesIgnored.has(attr.type)) {
+      console.warn('IGNORING', attr.type, attr.value);
     }
 
     return items;
@@ -58,6 +77,34 @@ function attributesAsIntelItems(attributes, baseMeta) {
 
 function insertIntelItem(item) {
   zeek.invoke('Intel::insert', [item]);
+}
+
+// Search for attributes with the to_ids flags set to 1
+async function searchAttributes() {
+  let start = performance.now();
+  // Tags can be used to opt-in or opt-out?
+  const tags = zeek.global_vars['MISP::attributes_search_tags'];
+
+  // Start unix timestamp.
+  const from = Math.floor(new Date().getTime() / 1000) - zeek.global_vars['MISP::attributes_search_interval'];
+
+  // We could just ignore fixed types here.
+  const search = {
+    tags,
+    from,
+    to_ids: 1,
+  };
+
+  console.log(`Attribute search ${JSON.stringify(search)}`);
+
+  const attributes = await mispObj.attributesRestSearch(search);
+  const requestMs = performance.now() - start;
+  start = performance.now();
+
+  const intelItems = attributesAsIntelItems(attributes);
+  intelItems.forEach(insertIntelItem);
+  const insertMs = performance.now() - start;
+  console.log(`searchAttributes done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
 }
 
 async function refreshEvent(eventId) {
@@ -70,17 +117,10 @@ async function refreshEvent(eventId) {
   start = performance.now();
 
   if (attributes.length > 0) {
-    const baseMeta = {
-      source: `MISP-${eventId}`,
-      desc: JSON.stringify(attributes[0].Event),
-      url: `${mispObj.url}/events/view/${eventId}`,
-      report_sightings: true,
-      misp_event_id: eventId,
-    };
-
-    const intelItems = attributesAsIntelItems(attributes, baseMeta);
+    const intelItems = attributesAsIntelItems(attributes);
 
     intelItems.forEach(insertIntelItem);
+
     const insertMs = performance.now() - start;
     console.log(`refreshEvent ${eventId} done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
   }
@@ -102,9 +142,11 @@ async function refreshIntel() {
   await Promise.all(pendingPromises).catch((reason) => {
     console.error('Failed to fetch fixed events:', reason);
   });
+  console.log('Fixed events done');
 
-  console.log('fixed events done');
-
+  console.log('Loading intel data through attributes search');
+  await searchAttributes();
+  console.log('Attributes search done');
   refreshRunning = false;
 }
 

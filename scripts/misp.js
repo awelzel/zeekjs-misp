@@ -47,17 +47,19 @@ class MISP {
     };
 
     const req = https.request(opts, (res) => {
-      console.log('MISP response', res.statusCode);
-      // TODO: Check statusCode and reject?
-      let rawData = '';
-      res.on('data', (chunk) => { rawData += chunk; });
-      res.on('end', () => {
-        resolve(JSON.parse(rawData));
-      });
-      res.on('error', (e) => {
-        console.error('response error', e);
-        reject(e);
-      });
+      if (res.statusCode < 200 || res.statusCode > 299) {
+        reject(res);
+      } else {
+        let rawData = '';
+        res.on('data', (chunk) => { rawData += chunk; });
+        res.on('end', () => {
+          resolve(JSON.parse(rawData));
+        });
+        res.on('error', (e) => {
+          console.error('response error', e);
+          reject(e);
+        });
+      }
     });
     req.on('error', (e) => {
       console.error('request error', e);
