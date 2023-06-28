@@ -199,7 +199,7 @@ const mispHits = new Map();
 // Handle Intel::match events and report them back to the
 // MISP instance  as sightings.
 async function handleIntelMatch(seen, items) {
-  console.log('JS Intel::match', seen.host || seen.indicator, seen.where, items[0]);
+  console.log('zeek-misp: Intel::match', seen.indicator);
   const now = Date.now();
   const pendingPromises = [];
 
@@ -210,19 +210,17 @@ async function handleIntelMatch(seen, items) {
     if (meta.report_sightings && attributeId !== undefined) {
       let hitsEntry = mispHits.get(attributeId);
 
-      console.log(`Current hits ${attributeId} ${JSON.stringify(hitsEntry)}`);
-
       // Create/reset hitsEntry if expired.
       if (hitsEntry === undefined || hitsEntry.ts < now - maxItemSightingsIntervalMilliseconds) {
         hitsEntry = { ts: now, hits: 0 };
         mispHits.set(attributeId, hitsEntry);
       }
 
-      if (hitsEntry.hits < maxItemSightings) {
+      hitsEntry.hits += 1;
+      if (hitsEntry.hits <= maxItemSightings) {
         pendingPromises.push(mispObj.addSightingAttribute(item.meta.misp_attribute_uid));
-        hitsEntry.hits += 1;
       } else {
-        console.log(`Sighting rate limited ${item.indicator} - ${hitsEntry}`);
+        console.log(`Sighting rate limited ${item.indicator} - ${JSON.stringify(hitsEntry)}`);
       }
     }
   });
