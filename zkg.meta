@@ -2,5 +2,7 @@
 
 script_dir = ./scripts
 
-depends =
-   zeekjs >=0.9.0
+# Comment in once built-in plugin support has
+# landed in Zeek master.
+# depends =
+#   zeekjs >=0.9.0
