@@ -20,21 +20,33 @@ export {
 	##
 	## Queries all attributes of these events and populates
 	## the Intel framework.
+	##
+	## TODO: Not sure this is very useful when having
+	##       the generic search.
 	const fixed_events: set[count] = {} &redef;
 
 	## Use the following tags as a filter. Use "!tag" for negation.
 	const attributes_search_tags: vector of string &redef;
 
-	## Interval to go back to search for attributes
-	## within MISP.
+	## Use the following event ids (strings) as a filter. Use "!eventid"
+	## for negation.
+	const attributes_search_event_ids: vector of string &redef;
+
+	## Filter by attribute types. Use "!type" to negate.
+	##
+	## Examples: ip-src, ip-dst, md5, sha1, ...
+	const attributes_search_types: vector of string &redef;
+
+	## Interval to go back to search for attributes within MISP.
+	## When set to 0days, no time range restriction applies.
 	const attributes_search_interval = 90days;
 
-	## Report this many sightings back to MISP
-	## in max_item_sightings_interval.
+	## Report this many sightings per attribute back to MISP
+	## over a period of max_item_sightings_interval.
 	const max_item_sightings = 5 &redef;
 
 	## Interval for max_item_sightings to avoid
-	## reporting too many sightings.
+	## flooding with sightings.
 	const max_item_sightings_interval = 5secs &redef;
 }
 

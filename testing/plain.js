@@ -19,4 +19,5 @@ console.log(misp);
 
   const r = repl.start();
   r.context.attributes = attributes;
+  r.context.myMisp = myMisp;
 })();

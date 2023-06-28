@@ -6,7 +6,6 @@ const maxItemSightings = zeek.global_vars['MISP::max_item_sightings'];
 const maxItemSightingsIntervalMilliseconds = zeek.global_vars['MISP::max_item_sightings_interval'] * 1000;
 
 let refreshRunning = false;
-
 let mispObj = null;
 
 const mispTypeToIntelType = {
@@ -25,6 +24,9 @@ const mispTypeToIntelType = {
 
   // That is pretty annoying...
   'ip-dst|port': 'Intel::ADDR',
+
+  // TODO: These would need to be split up in to intel items presumably.
+  // 'domain|ip', 'filename|sha1',
 };
 
 const mispTypesIgnored = new Set([
@@ -47,6 +49,8 @@ function mungeMispValue(t, v) {
   return v;
 }
 
+// Given a list of attributes, return Intel items to be inserted into
+// the intel framework.
 function attributesAsIntelItems(attributes) {
   return attributes.reduce((items, attr) => {
     const eventId = attr.Event.id;
@@ -79,21 +83,28 @@ function insertIntelItem(item) {
   zeek.invoke('Intel::insert', [item]);
 }
 
-// Search for attributes with the to_ids flags set to 1
+// Search for attributes with the to_ids flags set to 1 and
+// some configurable filters.
 async function searchAttributes() {
   let start = performance.now();
-  // Tags can be used to opt-in or opt-out?
-  const tags = zeek.global_vars['MISP::attributes_search_tags'];
 
-  // Start unix timestamp.
-  const from = Math.floor(new Date().getTime() / 1000) - zeek.global_vars['MISP::attributes_search_interval'];
+  const tags = zeek.global_vars['MISP::attributes_search_tags'];
+  const eventIds = zeek.global_vars['MISP::attributes_search_event_ids'];
+  const attrTypes = zeek.global_vars['MISP::attributes_search_types'];
 
   // We could just ignore fixed types here.
   const search = {
     tags,
-    from,
     to_ids: 1,
+    eventid: eventIds,
+    type: attrTypes,
   };
+
+  // Set "from" field to unix timestamp if attributes_search_interval is given.
+  const interval = zeek.global_vars['MISP::attributes_search_interval'];
+  if (interval > 0) {
+    search.from = Math.floor(new Date().getTime() / 1000) - interval;
+  }
 
   console.log(`Attribute search ${JSON.stringify(search)}`);
 
@@ -107,6 +118,7 @@ async function searchAttributes() {
   console.log(`searchAttributes done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
 }
 
+// Fetch all attributes of a single event.
 async function refreshEvent(eventId) {
   let start = performance.now();
   const attributes = await mispObj.attributesRestSearch({
@@ -135,14 +147,17 @@ async function refreshIntel() {
 
   refreshRunning = true;
 
+  // Not sure fixed events makes sense if we can use generic attributes
   const fixedEvents = zeek.global_vars['MISP::fixed_events'];
-  console.log(`Loading intel data for fixed events ${fixedEvents}`);
+  if (fixedEvents.length > 0) {
+    console.log(`Loading intel data for fixed events ${fixedEvents}`);
 
-  const pendingPromises = fixedEvents.map(refreshEvent);
-  await Promise.all(pendingPromises).catch((reason) => {
-    console.error('Failed to fetch fixed events:', reason);
-  });
-  console.log('Fixed events done');
+    const pendingPromises = fixedEvents.map(refreshEvent);
+    await Promise.all(pendingPromises).catch((reason) => {
+      console.error('Failed to fetch fixed events:', reason);
+    });
+    console.log('Fixed events done');
+  }
 
   console.log('Loading intel data through attributes search');
   await searchAttributes();
@@ -164,6 +179,7 @@ zeek.on('zeek_init', () => {
     zeek.global_vars['MISP::insecure'],
   );
 
+  // Start refreshing intel right after startup.
   setImmediate(refreshIntel);
 });
 
@@ -174,7 +190,8 @@ BigInt.prototype.toJSON = function () {
 
 const mispHits = new Map();
 
-// Report intel matches back to the MISP instance.
+// Handle Intel::match events and report them back to the MISP server as
+// sightings.
 zeek.on('Intel::match', { priority: -1 }, async (seen, items) => {
   console.log('JS Intel::match', seen.where, items[0]);
 
