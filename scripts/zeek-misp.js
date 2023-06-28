@@ -89,8 +89,12 @@ async function searchAttributes() {
   let start = performance.now();
 
   const tags = zeek.global_vars['MISP::attributes_search_tags'];
-  const eventIds = zeek.global_vars['MISP::attributes_search_event_ids'];
+  let eventIds = zeek.global_vars['MISP::attributes_search_event_ids'];
   const attrTypes = zeek.global_vars['MISP::attributes_search_types'];
+
+  // Remove fixedEvents from attribute search.
+  const fixedEvents = zeek.global_vars['MISP::fixed_events'];
+  eventIds = eventIds.concat(fixedEvents.map((e) => `!${e}`));
 
   // We could just ignore fixed types here.
   const search = {
@@ -160,7 +164,9 @@ async function refreshIntel() {
   }
 
   console.log('Loading intel data through attributes search');
-  await searchAttributes();
+  await searchAttributes().catch((reason) => {
+    console.error('Failed search attributes:', reason);
+  });
   console.log('Attributes search done');
   refreshRunning = false;
 }
@@ -190,18 +196,18 @@ BigInt.prototype.toJSON = function () {
 
 const mispHits = new Map();
 
-// Handle Intel::match events and report them back to the MISP server as
-// sightings.
-zeek.on('Intel::match', { priority: -1 }, async (seen, items) => {
-  console.log('JS Intel::match', seen.where, items[0]);
-
+// Handle Intel::match events and report them back to the
+// MISP instance  as sightings.
+async function handleIntelMatch(seen, items) {
+  console.log('JS Intel::match', seen.host || seen.indicator, seen.where, items[0]);
+  const now = Date.now();
   const pendingPromises = [];
+
   items.forEach((item) => {
     const { meta } = item;
     const attributeId = meta.misp_attribute_uid;
 
     if (meta.report_sightings && attributeId !== undefined) {
-      const now = Date.now();
       let hitsEntry = mispHits.get(attributeId);
 
       console.log(`Current hits ${attributeId} ${JSON.stringify(hitsEntry)}`);
@@ -225,4 +231,8 @@ zeek.on('Intel::match', { priority: -1 }, async (seen, items) => {
   await Promise.all(pendingPromises).catch((r) => {
     console.error('ERROR: Sending sightings failed:', r);
   });
-});
+}
+
+if (zeek.global_vars['MISP::report_sightings']) {
+  zeek.on('Intel::match', { priority: -1 }, handleIntelMatch);
+}

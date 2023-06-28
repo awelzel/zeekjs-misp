@@ -43,6 +43,10 @@ export {
 
 	## Report this many sightings per attribute back to MISP
 	## over a period of max_item_sightings_interval.
+	const report_sightings = T &redef;
+
+	## Report this many sightings per attribute back to MISP
+	## over a period of max_item_sightings_interval.
 	const max_item_sightings = 5 &redef;
 
 	## Interval for max_item_sightings to avoid
