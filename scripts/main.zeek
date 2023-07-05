@@ -52,6 +52,9 @@ export {
 	## Interval for max_item_sightings to avoid
 	## flooding with sightings.
 	const max_item_sightings_interval = 5secs &redef;
+
+	## Output debug information?
+	const debug = F &redef;
 }
 
 

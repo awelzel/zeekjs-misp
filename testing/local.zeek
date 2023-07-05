@@ -32,11 +32,11 @@ redef LogAscii::use_json = T;
 
 # Log the loaded intel data on a regular basis.
 module Intel;
-hook Telemetry::sync() {
-	print  "min_data_store host_data", |Intel::data_store$host_data|, |Intel::min_data_store$host_data|;
-	print  "min_data_store subnet_data", |Intel::data_store$subnet_data|, |Intel::min_data_store$subnet_data|;
-	print  "min_data_store string_data", |Intel::data_store$string_data|, |Intel::min_data_store$string_data|;
+# hook Telemetry::sync() {
+	# print  "min_data_store host_data", |Intel::data_store$host_data|, |Intel::min_data_store$host_data|;
+	# print  "min_data_store subnet_data", |Intel::data_store$subnet_data|, |Intel::min_data_store$subnet_data|;
+	# print  "min_data_store string_data", |Intel::data_store$string_data|, |Intel::min_data_store$string_data|;
 
 	# print Intel::data_store$host_data;
 	# print Intel::data_store$string_data;
-}
+# }

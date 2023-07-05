@@ -4,10 +4,26 @@ const misp = require('./misp');
 const refreshIntervalMilliSeconds = zeek.global_vars['MISP::refresh_interval'] * 1000;
 const maxItemSightings = zeek.global_vars['MISP::max_item_sightings'];
 const maxItemSightingsIntervalMilliseconds = zeek.global_vars['MISP::max_item_sightings_interval'] * 1000;
+const enableDebug = zeek.global_vars['MISP::debug'];
+
+function debugLog(...args) {
+  if (enableDebug) {
+    console.log('zeek-misp:', ...args);
+  }
+}
+
+function warningLog(...args) {
+  console.warn('zeek-misp:', ...args);
+}
+
+function errorLog(...args) {
+  console.error('zeek-misp:', ...args);
+}
 
 let refreshRunning = false;
 let mispObj = null;
 
+// Map MISP types to Intel framework types.
 const mispTypeToIntelType = {
   'ip-dst': 'Intel::ADDR',
   'ip-src': 'Intel::ADDR',
@@ -29,6 +45,7 @@ const mispTypeToIntelType = {
   // 'domain|ip', 'filename|sha1',
 };
 
+// MISP types that we do not handle.
 const mispTypesIgnored = new Set([
   'yara',
   'malware-sample',
@@ -50,7 +67,7 @@ function mungeMispValue(t, v) {
 }
 
 // Given a list of attributes, return Intel items to be inserted into
-// the intel framework.
+// the Intel framework.
 function attributesAsIntelItems(attributes) {
   return attributes.reduce((items, attr) => {
     const eventId = attr.Event.id;
@@ -72,7 +89,7 @@ function attributesAsIntelItems(attributes) {
       };
       items.push(intelItem);
     } else if (!mispTypesIgnored.has(attr.type)) {
-      console.warn('IGNORING', attr.type, attr.value);
+      warningLog(`Ignoring misp type ${attr.type} ${attr.value}`);
     }
 
     return items;
@@ -110,7 +127,7 @@ async function searchAttributes() {
     search.from = Math.floor(new Date().getTime() / 1000) - interval;
   }
 
-  console.log(`Attribute search ${JSON.stringify(search)}`);
+  debugLog(`Attribute search ${JSON.stringify(search)}`);
 
   const attributes = await mispObj.attributesRestSearch(search);
   const requestMs = performance.now() - start;
@@ -119,7 +136,7 @@ async function searchAttributes() {
   const intelItems = attributesAsIntelItems(attributes);
   intelItems.forEach(insertIntelItem);
   const insertMs = performance.now() - start;
-  console.log(`searchAttributes done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
+  debugLog(`searchAttributes done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
 }
 
 // Fetch all attributes of a single event.
@@ -138,14 +155,14 @@ async function refreshEvent(eventId) {
     intelItems.forEach(insertIntelItem);
 
     const insertMs = performance.now() - start;
-    console.log(`refreshEvent ${eventId} done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
+    debugLog(`refreshEvent ${eventId} done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
   }
 }
 
 async function refreshIntel() {
   // Schedule refreshes without drift. Skip a refresh
   // when the previous one is still running.
-  console.log(`Schedule for ${refreshIntervalMilliSeconds}...`);
+  debugLog(`Schedule for ${refreshIntervalMilliSeconds}...`);
   setTimeout(refreshIntel, refreshIntervalMilliSeconds);
   if (refreshRunning) { return; }
 
@@ -154,30 +171,41 @@ async function refreshIntel() {
   // Not sure fixed events makes sense if we can use generic attributes
   const fixedEvents = zeek.global_vars['MISP::fixed_events'];
   if (fixedEvents.length > 0) {
-    console.log(`Loading intel data for fixed events ${fixedEvents}`);
+    debugLog(`Loading intel data for fixed events ${fixedEvents}`);
 
     const pendingPromises = fixedEvents.map(refreshEvent);
     await Promise.all(pendingPromises).catch((reason) => {
-      console.error('Failed to fetch fixed events:', reason);
+      errorLog('Failed to fetch fixed events:', reason);
     });
-    console.log('Fixed events done');
+    debugLog('Fixed events done');
   }
 
-  console.log('Loading intel data through attributes search');
+  debugLog('Loading intel data through attributes search');
   await searchAttributes().catch((reason) => {
-    console.error('Failed search attributes:', reason);
+    errorLog('Failed search attributes:', reason);
   });
-  console.log('Attributes search done');
+  debugLog('Attributes search done');
   refreshRunning = false;
 }
 
 zeek.on('zeek_init', () => {
-  console.log('Starting up zeek-js-misp');
-  console.log('url', zeek.global_vars['MISP::url']);
-  console.log('api_key', `${zeek.global_vars['MISP::api_key'].slice(0, 4)}...`);
-  console.log('refresh_interval', refreshIntervalMilliSeconds);
-  console.log('max_item_sightings', maxItemSightings);
-  console.log('max_item_sightings_interval', maxItemSightingsIntervalMilliseconds);
+  debugLog('Starting up zeek-js-misp');
+
+  if (zeek.global_vars['MISP::url'].length == 0) {
+    warningLog('MISP::url not set');
+    return;
+  }
+
+  if (zeek.global_vars['MISP::api_key'].length == 0) {
+    warningLog('MISP::api_key not set');
+    return;
+  }
+
+  debugLog('url', zeek.global_vars['MISP::url']);
+  debugLog('api_key', `${zeek.global_vars['MISP::api_key'].slice(0, 4)}...`);
+  debugLog('refresh_interval', refreshIntervalMilliSeconds);
+  debugLog('max_item_sightings', maxItemSightings);
+  debugLog('max_item_sightings_interval', maxItemSightingsIntervalMilliseconds);
 
   mispObj = new misp.MISP(
     zeek.global_vars['MISP::url'],
@@ -189,11 +217,7 @@ zeek.on('zeek_init', () => {
   setImmediate(refreshIntel);
 });
 
-// eslint-disable-next-line
-BigInt.prototype.toJSON = function () {
-  return this.toString();
-};
-
+// Track hits per attributeId for rate-limiting.
 const mispHits = new Map();
 
 // Handle Intel::match events and report them back to the
@@ -220,14 +244,14 @@ async function handleIntelMatch(seen, items) {
       if (hitsEntry.hits <= maxItemSightings) {
         pendingPromises.push(mispObj.addSightingAttribute(item.meta.misp_attribute_uid));
       } else {
-        console.log(`Sighting rate limited ${item.indicator} - ${JSON.stringify(hitsEntry)}`);
+        warningLog(`Sighting rate limited ${item.indicator} - ${JSON.stringify(hitsEntry)}`);
       }
     }
   });
 
   // Wait for all the sigthings to finish.
   await Promise.all(pendingPromises).catch((r) => {
-    console.error('ERROR: Sending sightings failed:', r);
+    errorLog('ERROR: Sending sightings failed:', r);
   });
 }
 

@@ -55,16 +55,10 @@ class MISP {
         res.on('end', () => {
           resolve(JSON.parse(rawData));
         });
-        res.on('error', (e) => {
-          console.error('response error', e);
-          reject(e);
-        });
+        res.on('error', reject);
       }
     });
-    req.on('error', (e) => {
-      console.error('request error', e);
-      reject(e);
-    });
+    req.on('error', reject);
     req.on('close', () => { /* nothing? */ });
 
     if (jsonBody !== undefined) {
