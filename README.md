@@ -34,20 +34,45 @@ For example, the ALL tor nodes stream may be imported as a fixed event.
 ### Attributes search
 
 The alternative to fixed events is to search for all attributes on the MISP
-instance in a certain time range, tags or types. The options
-`MISP::attributes_search_tags`, `MISP::attributes_search_event_ids`,
-`MISP::attributes_search_types` and `MISP::attributes_search_interval`
-can be used to control this behavior.
+instance in a certain time range, tags or types.  By default, all attributes
+created in the past 90 days that have the ``to_ids`` flag set are fetched.
+
+For more fine-grained customization, currently The options `MISP::attributes_search_tags`,
+`MISP::attributes_search_event_ids`, `MISP::attributes_search_types` and
+`MISP::attributes_search_interval` can be used to control this behavior.
+
+For example, to ignore attributes of type MD5 and SHA1 hashes, extend the
+following option with the negated types:
+
+    redef MISP::attributes_search_types += {"!md5", "!sha1"}'
 
 ## Example usage
 
-Testing with a local MISP container instance:
+Testing with a local [MISP docker-compose setup](https://github.com/MISP/misp-docker),
+first create an API key for the user, export it as `MISP_API_KEY` into the
+environment had configure ``local.zeek`` as follows:
 
     redef MISP::url = "https://localhost:443";
     redef MISP::api_key = getenv("MISP_API_KEY");
     redef MISP::insecure = T;
     redef MISP::refresh_interval = 30sec;
+    redef MISP::debug = T;
 
-    redef MISP::fixed_events += {
-        1243,  # tor ALL nodes feed
-    };
+
+If you have MISP events that hold attributes that ``zeek-js-misp`` should
+ingest regardless of a time range, use ``MISP::fixed_events``. This can be
+useful if feeds of hashes or IPs are loaded into the same fixed event.
+
+    redef MISP::fixed_events += { 1234 }
+
+
+## Open topics
+
+* Current poll interval is 2 minutes resulting in an import delay for newly
+  created attributes and extra search overhead on a regular basis.
+
+* Data is not deleted from the Intel framework.
+
+Both could be approached using ZeroMQ bindings with MISP and act on creation
+and deletion of attributes. On the other hand, a regular export of Intel data
+from MISP via a cron job has a similar issue.
