@@ -73,7 +73,7 @@ redef record Intel::MetaData += {
 # 3) Report sigthings back to MISP by handling Intel::match() events.
 #
 @if ( ! Cluster::is_enabled() || Cluster::local_node_type() == Cluster::MANAGER )
-@ifdef ( JavaScript )
+@ifdef ( JavaScript::main_script_source )
 @load ./zeek-misp.js
 @else
 event zeek_init() {

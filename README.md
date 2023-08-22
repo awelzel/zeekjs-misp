@@ -19,7 +19,7 @@ MISP instance is reachable on `https://localhost:443`:
     $ docker run --net=host --rm -it zeek/zeek-dev
 
     container# echo "yes" | zkg install https://github.com/awelzel/zeek-js-misp
-    container# zeek -C -i  wlp0s20f3  frameworks/intel/seen packages MISP::url=http://localhost:443 MISP::api_key=v2MX... MISP::insecure=T MISP::debug=T  
+    container# zeek -C -i  wlp0s20f3  frameworks/intel/seen packages MISP::url=http://localhost:443 MISP::api_key=v2MX... MISP::insecure=T MISP::debug=T
     <params>, line 1: listening on wlp0s20f3
 
     zeek-misp: Starting up zeek-js-misp
