@@ -1,5 +1,5 @@
 {
-  "name": "zeek-js-misp",
+  "name": "zeekjs-misp",
   "version": "0.1.0",
   "description": "MISP connectivity for Zeek",
   "main": "index.js",

@@ -189,14 +189,14 @@ async function refreshIntel() {
 }
 
 zeek.on('zeek_init', () => {
-  debugLog('Starting up zeek-js-misp');
+  debugLog('Starting up zeekjs-misp');
 
-  if (zeek.global_vars['MISP::url'].length == 0) {
+  if (zeek.global_vars['MISP::url'].length === 0) {
     warningLog('MISP::url not set');
     return;
   }
 
-  if (zeek.global_vars['MISP::api_key'].length == 0) {
+  if (zeek.global_vars['MISP::api_key'].length === 0) {
     warningLog('MISP::api_key not set');
     return;
   }

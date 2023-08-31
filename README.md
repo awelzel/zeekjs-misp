@@ -1,4 +1,4 @@
-# zeek-js-misp
+# zeekjs-misp
 
 Implementation of a package similar to the [dovehawk](https://github.com/tylabs/dovehawk) package,
 but using JavaScript instead of ActiveHTTP.
@@ -18,11 +18,11 @@ MISP instance is reachable on `https://localhost:443`:
     $ docker pull zeek/zeek-dev
     $ docker run --net=host --rm -it zeek/zeek-dev
 
-    container# echo "yes" | zkg install https://github.com/awelzel/zeek-js-misp
+    container# echo "yes" | zkg install https://github.com/awelzel/zeekjs-misp
     container# zeek -C -i  wlp0s20f3  frameworks/intel/seen packages MISP::url=http://localhost:443 MISP::api_key=v2MX... MISP::insecure=T MISP::debug=T
     <params>, line 1: listening on wlp0s20f3
 
-    zeek-misp: Starting up zeek-js-misp
+    zeek-misp: Starting up zeekjs-misp
     zeek-misp: url http://localhost:443
     zeek-misp: api_key v2MX...
     zeek-misp: refresh_interval 120000
@@ -94,7 +94,7 @@ environment had configure `local.zeek` as follows:
     redef MISP::debug = T;
 
 
-If you have MISP events that hold attributes that zeek-js-misp should
+If you have MISP events that hold attributes that zeekjs-misp should
 ingest regardless of a time range, use `MISP::fixed_events`. This can be
 useful if feeds of hashes or IPs are loaded into the same fixed event.
 
