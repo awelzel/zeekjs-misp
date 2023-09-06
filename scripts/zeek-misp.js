@@ -223,7 +223,7 @@ const mispHits = new Map();
 // Handle Intel::match events and report them back to the
 // MISP instance  as sightings.
 async function handleIntelMatch(seen, items) {
-  console.log('zeek-misp: Intel::match', seen.indicator);
+  debugLog('zeek-misp: Intel::match', seen.indicator);
   const now = Date.now();
   const pendingPromises = [];
 
@@ -252,6 +252,8 @@ async function handleIntelMatch(seen, items) {
   // Wait for all the sigthings to finish.
   await Promise.all(pendingPromises).catch((r) => {
     errorLog('ERROR: Sending sightings failed:', r);
+  }).then(() => {
+    debugLog('Sightings reported', seen.indicator);
   });
 }
 
