@@ -51,6 +51,7 @@ const mispTypesIgnored = new Set([
   'malware-sample',
   'ssdeep',
   'pattern-in-traffic',
+  'btc',
 ]);
 
 function mungeMispValue(t, v) {
