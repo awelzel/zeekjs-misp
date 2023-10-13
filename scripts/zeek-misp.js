@@ -101,6 +101,20 @@ function insertIntelItem(item) {
   zeek.invoke('Intel::insert', [item]);
 }
 
+function printAttributesSummary(attributes) {
+  if (!enableDebug) { return; }
+
+  const summary = new Map();
+  attributes.forEach((a) => {
+    summary.set(a.type, (summary.get(a.type) || 0) + 1);
+  });
+
+  debugLog('Summary of attribute types');
+  summary.forEach((v, k) => {
+    debugLog(`  ${k} = ${v}`);
+  });
+}
+
 // Search for attributes with the to_ids flags set to 1 and
 // some configurable filters.
 async function searchAttributes() {
@@ -114,12 +128,19 @@ async function searchAttributes() {
   const fixedEvents = zeek.global_vars['MISP::fixed_events'];
   eventIds = eventIds.concat(fixedEvents.map((e) => `!${e}`));
 
+  // Ignore all mispTypes that we're not supporting unless they are
+  // explicitly specified.
+  const ignoredAttrTypes = [];
+  mispTypesIgnored.forEach((v) => {
+    if (!attrTypes.includes(v)) { ignoredAttrTypes.push(`!${v}`); }
+  });
+
   // We could just ignore fixed types here.
   const search = {
     tags,
     to_ids: 1,
     eventid: eventIds,
-    type: attrTypes,
+    type: attrTypes + ignoredAttrTypes,
   };
 
   // Set "from" field to unix timestamp if attributes_search_interval is given.
@@ -138,14 +159,25 @@ async function searchAttributes() {
   intelItems.forEach(insertIntelItem);
   const insertMs = performance.now() - start;
   debugLog(`searchAttributes done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
+  printAttributesSummary(attributes);
 }
 
 // Fetch all attributes of a single event.
 async function refreshEvent(eventId) {
-  let start = performance.now();
-  const attributes = await mispObj.attributesRestSearch({
-    eventid: eventId.toString(),
+  const ignoredAttrTypes = [];
+  mispTypesIgnored.forEach((v) => {
+    ignoredAttrTypes.push(`!${v}`);
   });
+
+  const search = {
+    eventid: eventId.toString(),
+    type: ignoredAttrTypes,
+  };
+
+  debugLog(`Attribute search ${JSON.stringify(search)}`);
+
+  let start = performance.now();
+  const attributes = await mispObj.attributesRestSearch(search);
 
   const requestMs = performance.now() - start;
   start = performance.now();
@@ -157,6 +189,7 @@ async function refreshEvent(eventId) {
 
     const insertMs = performance.now() - start;
     debugLog(`refreshEvent ${eventId} done items=${intelItems.length} requestMs=${requestMs}ms insertMs=${insertMs}ms`);
+    printAttributesSummary(attributes);
   }
 }
 
@@ -181,11 +214,15 @@ async function refreshIntel() {
     debugLog('Fixed events done');
   }
 
-  debugLog('Loading intel data through attributes search');
-  await searchAttributes().catch((reason) => {
-    errorLog('Failed search attributes:', reason);
-  });
-  debugLog('Attributes search done');
+  // Quirky, if attributes_search_interval is -1sec, don't do the search.
+  if (zeek.global_vars['MISP::attributes_search_interval'] >= 0) {
+    debugLog('Loading intel data through attributes search');
+    await searchAttributes().catch((reason) => {
+      errorLog('Failed search attributes:', reason);
+    });
+    debugLog('Attributes search done');
+  }
+
   refreshRunning = false;
 }
 

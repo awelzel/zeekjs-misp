@@ -39,7 +39,9 @@ export {
 
 	## Interval to go back to search for attributes within MISP.
 	## When set to 0days, no time range restriction applies.
-	const attributes_search_interval = 90days &redef;
+	## If set to a negative interval (-1sec) the attribute search
+	## is disabled.
+	const attributes_search_interval = 90 days &redef;
 
 	## Report this many sightings per attribute back to MISP
 	## over a period of max_item_sightings_interval.
